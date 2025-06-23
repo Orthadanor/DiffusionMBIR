@@ -257,7 +257,7 @@ def get_pc_radon_ADMM_TV_vol(sde, predictor, corrector, inverse_scaler, snr,
         x_mean = x
         return x, x_mean
 
-    def A_cg(x):
+    def A_cg(x): # AT*A + rho * DzT*Dz
         return _AT(_A(x)) + rho * _DzT(_Dz(x))
 
     def CG(A_fn, b_cg, x, n_inner=10):
@@ -285,7 +285,7 @@ def get_pc_radon_ADMM_TV_vol(sde, predictor, corrector, inverse_scaler, snr,
             del_z = del_z.to(x.device)
             udel_z = del_z.to(x.device)
         for i in range(niter):
-            b_cg = ATy + rho * (_DzT(del_z) - _DzT(udel_z))
+            b_cg = ATy + rho * (_DzT(del_z) - _DzT(udel_z)) # "TV" penalty
             x = CG(A_cg, b_cg, x, n_inner=1)
 
             del_z = shrink(_Dz(x) + udel_z, lamb_1 / rho)
@@ -302,11 +302,11 @@ def get_pc_radon_ADMM_TV_vol(sde, predictor, corrector, inverse_scaler, snr,
 
         return radon_update_fn
 
-    def get_ADMM_TV_fn():
+    def get_ADMM_TV_fn(): # ADMM TV update function
         def ADMM_TV_fn(x, measurement=None):
             with torch.no_grad():
-                ATy = _AT(measurement)
-                x, x_mean = CS_routine(x, ATy, niter=1)
+                ATy = _AT(measurement) # Back-projection operator to convert measurement data back to image space
+                x, x_mean = CS_routine(x, ATy, niter=1) # Perform 1 iteration of ADMM TV
                 return x, x_mean
         return ADMM_TV_fn
 
