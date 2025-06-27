@@ -237,6 +237,45 @@ class AAPM(Dataset):
     data = np.expand_dims(data, axis=0)
     return data
 
+class IXI(Dataset):
+  """Dataloader for IXI dataset."""
+  def __init__(self, root, sort=False):
+      self.root = Path(root)
+      self.data_list = list(self.root.glob('*.npy'))
+      if sort:
+          self.data_list = sorted(self.data_list)
+
+  def __len__(self):
+      return len(self.data_list) * self._num_slices_per_volume()
+
+  def _num_slices_per_volume(self):
+      # All volumes assumed to have same shape
+      sample = np.load(self.data_list[0], mmap_mode='r')
+      return sample.shape[2]  # slicing along the axial dimension
+
+  def __getitem__(self, idx):
+      vol_index = idx // self._num_slices_per_volume()
+      slice_index = idx % self._num_slices_per_volume()
+      vol_path = self.data_list[vol_index]
+      volume = np.load(vol_path)
+      slice_img = volume[:, :, slice_index].astype(np.float32)  # axial slice
+      slice_img = np.expand_dims(slice_img, axis=0)  # [1, H, W]
+      return slice_img
+
+class IXISliced(Dataset):
+    def __init__(self, root, sort=False):
+        self.root = Path(root)
+        self.data_list = list(self.root.glob('*.npy'))
+        if sort:
+            self.data_list = sorted(self.data_list)
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+        data = np.load(self.data_list[idx]).astype(np.float32)
+        data = np.expand_dims(data, axis=0)  # [1, H, W]
+        return data
 
 class Object5(Dataset):
   def __init__(self, root, slice, fast=False):
@@ -349,6 +388,12 @@ def create_dataloader(configs, evaluation=False, sort=True):
   elif configs.data.dataset == 'fastmri_knee':
     train_dataset = fastmri_knee(Path(configs.data.root) / f'knee_{configs.data.image_size}_train')
     val_dataset = fastmri_knee_infer(Path(configs.data.root) / f'knee_{configs.data.image_size}_val', sort=sort)
+  elif configs.data.dataset == 'IXI':
+    train_dataset = IXI(Path(configs.data.root), sort=False)
+    val_dataset = IXI(Path(configs.data.root), sort=True)
+  elif configs.data.dataset == 'IXISliced':
+    train_dataset = IXISliced(Path(configs.data.root) / 'train', sort=False)
+    val_dataset = IXISliced(Path(configs.data.root) / 'val', sort=True)
   else:
     raise ValueError(f'Dataset {configs.data.dataset} not recognized.')
 

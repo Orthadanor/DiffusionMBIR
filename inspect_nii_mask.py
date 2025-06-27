@@ -3,8 +3,8 @@ import nibabel as nib
 import matplotlib.pyplot as plt
 
 # === File paths ===
-t1_path = "/home/yuchenliu/Dataset/t1/IXI013-HH-1212_t1.nii.gz"
-mask_path = "/home/yuchenliu/Dataset/mask/IXI013-HH-1212_mask.nii.gz"
+t1_path = "/home/yuchenliu/Dataset/t1/IXI013-HH-1212_t1.npy"
+mask_path = "/home/yuchenliu/Dataset/mask/IXI013-HH-1212_mask.npy"
 
 # === Load NIfTI files ===
 t1_img = nib.load(t1_path)

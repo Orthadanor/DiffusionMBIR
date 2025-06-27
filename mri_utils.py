@@ -22,45 +22,48 @@ def visualize_slice(t1_file, mask_file, plane, slice_index, output_dir, overlay_
     t1 = np.load(t1_file)
     mask = np.load(mask_file)
 
-    if plane == 'sagittal':
-        t1_slice = t1[slice_index, :, :]
-        mask_slice = mask[slice_index, :, :]
-    elif plane == 'coronal':
-        t1_slice = t1[:, slice_index, :]
-        mask_slice = mask[:, slice_index, :]
-    elif plane == 'axial':
-        t1_slice = t1[:, :, slice_index]
-        mask_slice = mask[:, :, slice_index]
+    if t1.ndim == 2:
+        # Already a 2D slice
+        t1_slice = t1
+        mask_slice = mask
+    elif t1.ndim == 3:
+        if plane == 'sagittal':
+            t1_slice = t1[slice_index, :, :]
+            mask_slice = mask[slice_index, :, :]
+        elif plane == 'coronal':
+            t1_slice = t1[:, slice_index, :]
+            mask_slice = mask[:, slice_index, :]
+        elif plane == 'axial':
+            t1_slice = t1[:, :, slice_index]
+            mask_slice = mask[:, :, slice_index]
+        else:
+            raise ValueError("Plane must be 'sagittal', 'coronal', or 'axial'.")
     else:
-        raise ValueError("Plane must be 'sagittal', 'coronal', or 'axial'.")
+        raise ValueError(f"Unsupported input shape: {t1.shape}")
 
-    # Normalize
+    # Normalize for display
     t1_slice = (t1_slice - np.min(t1_slice)) / (np.max(t1_slice) - np.min(t1_slice) + 1e-8)
+    print(f"Visualizing {plane} slice {slice_index} with shape {t1_slice.shape}")
 
     # Plot
     plt.figure(figsize=(8, 6))
-    
 
     if overlay_mask:
-        # plt.imshow(mask_slice.T > 0.5, cmap='Reds', alpha=0.3, origin='lower')
         t1_masked = np.copy(t1_slice)
-        t1_masked[mask_slice > 0.5] = 0.0  # Black out masked voxels
+        t1_masked[mask_slice > 0.5] = 0.0
         plt.imshow(t1_masked.T, cmap='gray', origin='lower')
     else:
         plt.imshow(t1_slice.T, cmap='gray', origin='lower')
-        
+
     plt.title(f"{plane.capitalize()} Slice {slice_index}")
     plt.axis('off')
 
-
     os.makedirs(output_dir, exist_ok=True)
-    if overlay_mask:
-        out_file = os.path.join(output_dir, f"{plane}_slice_{slice_index}_mask.png")
-    else:
-        out_file = os.path.join(output_dir, f"{plane}_slice_{slice_index}.png")
+    out_file = os.path.join(output_dir, f"{plane}_slice_{slice_index}.png")
     plt.savefig(out_file, bbox_inches='tight', pad_inches=0)
     plt.close()
     print(f"Saved visualization to: {out_file}")
+
 
 def launch_fsleyes(t1_file, mask_file, out_dir):
     t1 = np.load(t1_file)

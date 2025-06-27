@@ -81,6 +81,8 @@ def train(config, workdir):
   train_dl, eval_dl = datasets.create_dataloader(config)
   num_data = len(train_dl.dataset)
 
+  steps_per_epoch = len(train_dl)
+  print(f"Number of samples: {num_data}, batch size: {config.training.batch_size}, steps per epoch: {steps_per_epoch}")
   # Create data normalizer and its inverse
   scaler = datasets.get_data_scaler(config)
   inverse_scaler = datasets.get_data_inverse_scaler(config)
@@ -137,12 +139,12 @@ def train(config, workdir):
       if step != 0 and step % config.training.snapshot_freq_for_preemption == 0:
         save_checkpoint(checkpoint_meta_dir, state)
       # Report the loss on an evaluation dataset periodically
-      # if step % config.training.eval_freq == 0:
-      #   eval_batch = scaler(next(iter(eval_dl)).to(config.device))
-      #   eval_loss = eval_step_fn(state, eval_batch)
-      #   logging.info("step: %d, eval_loss: %.5e" % (step, eval_loss.item()))
-      #   global_step = num_data * epoch + step
-      #   writer.add_scalar("eval_loss", scalar_value=eval_loss.item(), global_step=global_step)
+      if step % config.training.eval_freq == 0:
+        eval_batch = scaler(next(iter(eval_dl)).to(config.device))
+        eval_loss = eval_step_fn(state, eval_batch)
+        logging.info("step: %d, eval_loss: %.5e" % (step, eval_loss.item()))
+        global_step = num_data * epoch + step
+        writer.add_scalar("eval_loss", scalar_value=eval_loss.item(), global_step=global_step)
 
     # Save a checkpoint for every epoch
     save_checkpoint(checkpoint_dir, state, name=f'checkpoint_{epoch}.pth')

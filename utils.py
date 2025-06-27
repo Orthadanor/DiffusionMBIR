@@ -26,25 +26,29 @@ def clear(x, normalize=True):
 
 def restore_checkpoint(ckpt_dir, state, device, skip_sigma=False, skip_optimizer=False):
   ckpt_dir = Path(ckpt_dir)
-  # import ipdb; ipdb.set_trace()
-  # ckpt = ckpt_dir / "checkpoint.pth"
-  if not ckpt_dir.exists():
-    logging.warning(f"No checkpoint found at {ckpt_dir}. "
-                  f"Returned the same state as input")
+  if not ckpt_dir.exists() or not ckpt_dir.is_dir():
+    logging.warning(f"No checkpoint directory found at {ckpt_dir}. Returned the same state as input")
     return state
-  else:
-    loaded_state = torch.load(ckpt_dir, map_location=device)
-    if not skip_optimizer:
-      state['optimizer'].load_state_dict(loaded_state['optimizer'])
-    loaded_model_state = loaded_state['model']
-    if skip_sigma:
-      loaded_model_state.pop('module.sigmas')
 
-    state['model'].load_state_dict(loaded_model_state, strict=False)
-    state['ema'].load_state_dict(loaded_state['ema'])
-    state['step'] = loaded_state['step']
-    print(f'loaded checkpoint dir from {ckpt_dir}')
+  # Find checkpoint files in the directory
+  ckpt_files = sorted([f for f in ckpt_dir.iterdir() if f.is_file() and (f.suffix == '.pth' or f.suffix == '.pt')])
+  if not ckpt_files:
+    logging.warning(f"No checkpoint file found in {ckpt_dir}. Returned the same state as input")
     return state
+
+  # Use the latest checkpoint file
+  ckpt_path = ckpt_files[-1]
+  loaded_state = torch.load(ckpt_path, map_location=device)
+  if not skip_optimizer:
+    state['optimizer'].load_state_dict(loaded_state['optimizer'])
+  loaded_model_state = loaded_state['model']
+  if skip_sigma and 'module.sigmas' in loaded_model_state:
+    loaded_model_state.pop('module.sigmas')
+  state['model'].load_state_dict(loaded_model_state, strict=False)
+  state['ema'].load_state_dict(loaded_state['ema'])
+  state['step'] = loaded_state['step']
+  print(f'Loaded checkpoint from {ckpt_path}')
+  return state
 
 
 def save_checkpoint(ckpt_dir, state, name="checkpoint.pth"):
