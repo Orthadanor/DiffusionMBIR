@@ -156,7 +156,7 @@ def train(config, workdir):
       loss = train_step_fn(state, batch)
       if step % config.training.log_freq == 0:
         logging.info("step: %d, training_loss: %.5e" % (step, loss.item()))
-        global_step = num_data * epoch + step
+        global_step = steps_per_epoch * (epoch - 1) + step
         writer.add_scalar("training_loss", scalar_value=loss, global_step=global_step)
       if step != 0 and step % config.training.snapshot_freq_for_preemption == 0:
         save_checkpoint(checkpoint_meta_dir, state)
