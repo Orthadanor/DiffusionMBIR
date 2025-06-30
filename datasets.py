@@ -405,7 +405,7 @@ def create_dataloader(configs, evaluation=False, sort=True):
   )
   val_loader = DataLoader(
     dataset=val_dataset,
-    batch_size=configs.training.batch_size,
+    batch_size=configs.eval.batch_size,
     # shuffle=False,
     shuffle=True,
     drop_last=True

@@ -21,6 +21,7 @@ import io
 import os
 import time
 from pathlib import Path
+import yaml
 
 import numpy as np
 import logging
@@ -53,6 +54,11 @@ def train(config, workdir):
       contains checkpoint training will be resumed from the latest checkpoint.
   """
 
+  # Save config to a YAML file for reproducibility
+  config_save_path = os.path.join(workdir, "config.yaml")
+  with open(config_save_path, "w") as f:
+      yaml.dump(config.to_dict(), f)
+  
   # Create directories for experimental logs
   sample_dir = os.path.join(workdir, "samples")
   Path(sample_dir).mkdir(parents=True, exist_ok=True)
@@ -62,7 +68,22 @@ def train(config, workdir):
   writer = tensorboard.SummaryWriter(tb_dir)
 
   # Initialize model.
+  # score_model = mutils.create_model(config)
+  
+  # gpu configuration
+  # Use all visible GPUs (as set by CUDA_VISIBLE_DEVICES)
+  device = torch.device('cuda:0')
+  config.device = device
   score_model = mutils.create_model(config)
+
+  # Inspect model parameter size
+  total_params = sum(p.numel() for p in score_model.parameters())
+  trainable_params = sum(p.numel() for p in score_model.parameters() if p.requires_grad)
+  print(f"Total parameters: {total_params:,}")
+  print(f"Trainable parameters: {trainable_params:,}")
+  # for name, param in score_model.named_parameters():
+  #   print(f"{name}: {param.numel()} parameters")
+    
   ema = ExponentialMovingAverage(score_model.parameters(), decay=config.model.ema_rate)
   optimizer = losses.get_optimizer(config, score_model.parameters())
   state = dict(optimizer=optimizer, model=score_model, ema=ema, step=0)
@@ -114,8 +135,9 @@ def train(config, workdir):
 
   # Building sampling functions
   if config.training.snapshot_sampling:
-    sampling_shape = (config.training.batch_size, config.data.num_channels,
+    sampling_shape = (config.training.sample_size, config.data.num_channels,
                       config.data.image_size, config.data.image_size)
+    print("Sampling shape:", sampling_shape)
     sampling_fn = sampling.get_sampling_fn(config, sde, sampling_shape, inverse_scaler, sampling_eps)
 
   # In case there are multiple hosts (e.g., TPU pods), only log to host 0
@@ -138,10 +160,15 @@ def train(config, workdir):
         writer.add_scalar("training_loss", scalar_value=loss, global_step=global_step)
       if step != 0 and step % config.training.snapshot_freq_for_preemption == 0:
         save_checkpoint(checkpoint_meta_dir, state)
+        
       # Report the loss on an evaluation dataset periodically
       if step % config.training.eval_freq == 0:
+
         eval_batch = scaler(next(iter(eval_dl)).to(config.device))
-        eval_loss = eval_step_fn(state, eval_batch)
+
+        with torch.no_grad():
+          eval_loss = eval_step_fn(state, eval_batch)
+        
         logging.info("step: %d, eval_loss: %.5e" % (step, eval_loss.item()))
         global_step = num_data * epoch + step
         writer.add_scalar("eval_loss", scalar_value=eval_loss.item(), global_step=global_step)
@@ -150,21 +177,30 @@ def train(config, workdir):
     save_checkpoint(checkpoint_dir, state, name=f'checkpoint_{epoch}.pth')
 
     # Generate and save samples for every epoch
-    if config.training.snapshot_sampling:
-      print('sampling')
+    if config.training.snapshot_sampling and epoch % config.training.snapshot_freq == 0:
+      print('sampling...')
       ema.store(score_model.parameters())
-      ema.copy_to(score_model.parameters())
+      # Overwrites the model weights with the EMA (exponential moving average) 
+      # smoothed version of the model that usually generates higher quality samples.
+      ema.copy_to(score_model.parameters()) 
       sample, n = sampling_fn(score_model)
+      # print("Sample shape:", sample.shape)      
+      
       if config.data.is_complex:
         sample = root_sum_of_squares(sample, dim=1).unsqueeze(dim=0)
       ema.restore(score_model.parameters())
-      this_sample_dir = os.path.join(sample_dir, "iter_{}".format(epoch))
+      this_sample_dir = os.path.join(sample_dir, "epoch_{}".format(epoch))
       Path(this_sample_dir).mkdir(parents=True, exist_ok=True)
       nrow = int(np.sqrt(sample.shape[0]))
       image_grid = make_grid(sample, nrow, padding=2)
       sample = np.clip(sample.permute(0, 2, 3, 1).cpu().numpy() * 255, 0, 255).astype(np.uint8)
       np.save(os.path.join(this_sample_dir, "sample"), sample)
       save_image(image_grid, os.path.join(this_sample_dir, "sample.png"))
+      
+      # Fix Cuda OOM
+      del sample
+      torch.cuda.empty_cache()
+      gc.collect()
 
 
 def evaluate(config,

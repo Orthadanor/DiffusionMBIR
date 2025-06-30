@@ -3,10 +3,21 @@ from configs.default_lsun_configs import get_default_configs
 
 def get_config():
   config = get_default_configs()
+  
+  # # Set the device to GPU if available
+  # config.device = torch.device('cuda:1')  # or config.device = 'cuda:1'
+  
   # training
   training = config.training
   training.sde = 'vesde'
   training.continuous = True
+  
+  training.batch_size = 64
+  training.sample_size = 4
+  training.epochs = 300 # 13944/3486
+  training.snapshot_freq = 10
+  training.log_freq = 10
+  training.eval_freq = 50
 
   # sampling
   sampling = config.sampling
@@ -14,6 +25,9 @@ def get_config():
   sampling.predictor = 'reverse_diffusion'
   sampling.corrector = 'langevin'
 
+  # evaluation
+  config.eval.batch_size = 64
+  
   # data
   data = config.data
   data.dataset = 'IXISliced'
@@ -21,10 +35,12 @@ def get_config():
   data.is_complex = False
   data.is_multi = False
   data.image_size = 128
+  data.centered = True
 
   # model
   model = config.model
   model.name = 'ncsnpp'
+  model.num_scales = 2000 # Diffusion steps
   model.scale_by_sigma = True
   model.ema_rate = 0.999
   model.normalization = 'GroupNorm'
