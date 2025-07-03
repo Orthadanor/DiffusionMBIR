@@ -31,7 +31,8 @@ def get_config():
   # data
   data = config.data
   data.dataset = 'IXISliced'
-  data.root = '/home/yuchenliu/Dataset/IXI/t1_np/t1_np_sliced_128' 
+  # data.root = '/home/yuchenliu/Dataset/IXI/t1_np/t1_np_sliced_128' # Not correctly normalized
+  data.root = '/home/yuchenliu/Dataset/IXI/t1_np_masked_128'
   data.is_complex = False
   data.is_multi = False
   data.image_size = 128

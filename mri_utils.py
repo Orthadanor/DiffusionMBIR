@@ -63,6 +63,66 @@ def visualize_slice(t1_file, mask_file, plane, slice_index, output_dir, overlay_
     plt.savefig(out_file, bbox_inches='tight', pad_inches=0)
     plt.close()
     print(f"Saved visualization to: {out_file}")
+    
+def visualize_slice_with_percentile_clip(t1_file, plane, slice_index, output_dir=None):
+    """
+    Visualize a slice from t1_file, plot its histogram,
+    clip values above 98th percentile, and show both original and clipped images.
+    """
+    t1 = np.load(t1_file)
+    # Select slice
+    if t1.ndim == 2:
+        t1_slice = t1
+    elif t1.ndim == 3:
+        if plane == 'sagittal':
+            t1_slice = t1[slice_index, :, :]
+        elif plane == 'coronal':
+            t1_slice = t1[:, slice_index, :]
+        elif plane == 'axial':
+            t1_slice = t1[:, :, slice_index]
+        else:
+            raise ValueError("Plane must be 'sagittal', 'coronal', or 'axial'.")
+    else:
+        raise ValueError(f"Unsupported input shape: {t1.shape}")
+
+    # Plot histogram
+    plt.figure(figsize=(16, 5))
+    plt.subplot(1, 3, 1)
+    plt.hist(t1_slice.flatten(), bins=100, color='gray')
+    plt.title("Histogram of Slice")
+    plt.xlabel("Intensity")
+    plt.ylabel("Count")
+
+    # Compute 98th percentile
+    p98 = np.percentile(t1_slice, 98)
+    # Clip values above 98th percentile
+    t1_clipped = np.copy(t1_slice)
+    t1_clipped[t1_clipped > p98] = p98
+
+    # Normalize for display
+    t1_slice_norm = (t1_slice - np.min(t1_slice)) / (np.max(t1_slice) - np.min(t1_slice) + 1e-8)
+    t1_clipped_norm = (t1_clipped - np.min(t1_clipped)) / (np.max(t1_clipped) - np.min(t1_clipped) + 1e-8)
+
+    # Plot original slice
+    plt.subplot(1, 3, 2)
+    plt.imshow(t1_slice_norm.T, cmap='gray', origin='lower')
+    plt.title("Original Slice")
+    plt.axis('off')
+
+    # Plot clipped slice
+    plt.subplot(1, 3, 3)
+    plt.imshow(t1_clipped_norm.T, cmap='gray', origin='lower')
+    plt.title("Clipped (Top 2% mapped to 98th percentile)")
+    plt.axis('off')
+
+    plt.tight_layout()
+    if output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        out_file = os.path.join(output_dir, f"cropped_{plane}_slice_{slice_index}_hist.png")
+        plt.savefig(out_file, bbox_inches='tight', pad_inches=0.1)
+        print(f"Saved visualization to: {out_file}")
+        plt.close()
+    plt.show()
 
 
 def launch_fsleyes(t1_file, mask_file, out_dir):
@@ -87,9 +147,9 @@ def launch_fsleyes(t1_file, mask_file, out_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, choices=["info", "slice", "fsleyes"], required=True)
+    parser.add_argument("--mode", type=str, choices=["info", "slice", "fsleyes", "slice_hist"], required=True)
     parser.add_argument("--t1_file", type=str, required=True)
-    parser.add_argument("--mask_file", type=str, required=True)
+    parser.add_argument("--mask_file", type=str, required=False)
     parser.add_argument("--no_mask", action="store_true", help="If set, disables mask overlay on slice visualization")
     
     # Slice mode args
@@ -116,6 +176,14 @@ def main():
 
     elif args.mode == "fsleyes":
         launch_fsleyes(args.t1_file, args.mask_file, args.fsleyes_dir)
+        
+    elif args.mode == "slice_hist":
+        visualize_slice_with_percentile_clip(
+            args.t1_file,
+            args.plane,
+            args.slice_index,
+            args.output_dir
+        )
 
 if __name__ == "__main__":
     main()

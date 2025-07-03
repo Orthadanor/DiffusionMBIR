@@ -1,3 +1,53 @@
+# Adapting DiffusionMBIR to MRI Reconstruction
+
+## IXI Dataset
+
+- Visualize a Slice: You can visualize a specific slice from a T1 volume and its corresponding mask using:
+  - `--plane` can be `axial`, `coronal`, or `sagittal`.
+  - `--slice_index` specifies which slice to visualize.
+
+  ```bash
+  python mri_utils.py \
+    --mode slice \
+    --t1_file $T1_FILE_PATH$ \
+    --mask_file $MASK_FILE_PATH$ \
+    --plane axial \
+    --slice_index 70
+  ```
+
+- 3D Anatomical View in FSLeyes: To convert a T1 volume and mask to NIfTI format and open them in FSLeyes for 3D inspection:
+
+  ```bash
+  python mri_utils.py \
+    --mode fsleyes \
+    --t1_file $T1_FILE_PATH$ \
+    --mask_file $MASK_FILE_PATH$
+  ```
+
+- Visualize a Preprocessed Slice: To visualize a slice, plot its histogram, and see the effect of mapping the top 2% of intensities to the 98th percentile:
+
+  ```bash
+  python mri_utils.py \
+    --mode slice_hist \
+    --t1_file $T1_FILE_PATH$ \
+    --plane axial \
+    --slice_index 70
+  ```
+
+Replace `$T1_FILE_PATH$` and `$MASK_FILE_PATH$` with the actual paths to your `.npy` files.
+
+### Dataset Preprocessing 
+```bash
+python python mri_preprocess_IXI_slices_128.py
+```
+
+## Training
+Train the diffusion model with preprocessed IXI dataset by using e.g.
+```bash
+bash train_IXI.sh
+```
+You can modify the training config with the ```--config``` flag.
+
 # Solving 3D Inverse Problems using Pre-trained 2D Diffusion Models (CVPR 2023)
 
 Official PyTorch implementation of **DiffusionMBIR**, the CVPR 2023 paper "[Solving 3D Inverse Problems using Pre-trained 2D Diffusion Models](https://arxiv.org/abs/2211.10655)". Code modified from [score_sde_pytorch](https://github.com/yang-song/score_sde_pytorch).
@@ -10,41 +60,6 @@ Official PyTorch implementation of **DiffusionMBIR**, the CVPR 2023 paper "[Solv
 ## Getting started
 
 ### Download pre-trained model weights
-* **CT** experiments
-```bash
-mkdir -p exp/ve/AAPM_256_ncsnpp_continuous
-wget -O exp/ve/AAPM_256_ncsnpp_continuous/checkpoint_185.pth https://www.dropbox.com/s/7zevc3eu8xkqx0x/checkpoint_185.pth?dl=1
-```
-* For **MRI** experiments
-```bash
-mkdir -p exp/ve/fastmri_knee_320_ncsnpp_continuous
-wget -O exp/ve/fastmri_knee_320_ncsnpp_continuous/checkpoint_95.pth https://www.dropbox.com/s/27gtxkmh2dlkho9/checkpoint_95.pth?dl=1
-```
-(If your system does not have `wget` installed, you may replace `wget -O` with `curl -L -o`.)
-
-### Download the data
-* **CT** experiments (in-distribution)
-```bash
-DATA_DIR=./data/CT/ind/256_sorted
-mkdir -p "$DATA_DIR"
-wget -O "$DATA_DIR"/256_sorted.zip https://www.dropbox.com/sh/ibjpgo5seksjera/AADlhYqCWq5C4K0uWSrCL_JUa?dl=1
-unzip -d "$DATA_DIR"/ "$DATA_DIR"/256_sorted.zip
-```
-* **CT** experiments (out-of-distribution)
-```bash
-DATA_DIR=./data/CT/ood/256_sorted
-mkdir -p "$DATA_DIR"
-wget -O "$DATA_DIR"/slice.zip https://www.dropbox.com/s/h3drrlx0pvutyoi/slice.zip?dl=0
-unzip -d "$DATA_DIR"/ "$DATA_DIR"/slice.zip
-```
-* **MRI** experiments (out-of-distribution)
-```bash
-DATA_DIR=./data/MRI/BRATS
-mkdir -p "$DATA_DIR"
-wget -O "$DATA_DIR"/Brats18_CBICA_AAM_1.zip https://www.dropbox.com/s/1a73t58asbqs1mi/Brats18_CBICA_AAM_1.zip?dl=0
-unzip -d "$DATA_DIR"/ "$DATA_DIR"/Brats18_CBICA_AAM_1.zip
-```
-
 
 * Make a conda environment and install dependencies
 ```bash
@@ -60,15 +75,8 @@ python inverse_problem_solver_AAPM_3d_total.py
 python inverse_problem_solver_BRATS_MRI_3d_total.py
 ```
 
-## Training
-You may train the diffusion model with your own data by using e.g.
-```bash
-bash train_AAPM256.sh
-```
-You can modify the training config with the ```--config``` flag.
-
 ## Citation
-If you find our work interesting, please consider citing
+This repo is based on the following work:
 
 ```
 @InProceedings{chung2023solving,

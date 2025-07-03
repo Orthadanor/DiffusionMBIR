@@ -4,8 +4,8 @@ from sklearn.model_selection import train_test_split
 from PIL import Image
 
 # Configuration
-source_dir = Path("/home/yuchenliu/Dataset/t1_np")
-output_root = Path("/home/yuchenliu/Dataset/IXI/t1_np/t1_np_sliced")
+source_dir = Path("/home/yuchenliu/Dataset")
+output_root = Path("/home/yuchenliu/Dataset/IXI/t1_np_masked")
 resized_root = Path("/home/yuchenliu/Dataset/IXI/t1_np/t1_np_sliced_128")
 
 slice_range = range(55, 85)  # slices 55 to 84 (30 slices)
@@ -37,6 +37,8 @@ for split, data in [('train', train_data), ('val', val_data)]:
     split_dir.mkdir(parents=True, exist_ok=True)
     for slice_img, fname in data:
         np.save(split_dir / fname, slice_img)
+        
+# Process normalized slices - for each 
 
 # Step 4: Resize and save 128×128 versions
 for split, data in [('train', train_data), ('val', val_data)]:
