@@ -17,6 +17,7 @@ from physics.inpainting import Inpainting
 import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm
+from PIL import Image
 
 ###############################################
 # Configurations
@@ -24,12 +25,13 @@ from tqdm import tqdm
 problem = 'inpainting_ADMM_TV_2d'
 config_name = 'IXI_128_ncsnpp_continuous'
 sde = 'VESDE'
-num_scales = 2000
-ckpt_num = 6
+num_scales = 2000 # Diffusion steps
+ckpt_num = 10 # Use best checkpoint
 N = num_scales
+resize_to = (128, 128)
 
-vol_name = 'L067'
-root = Path(f'./data/CT/ind/256_sorted/{vol_name}')
+vol_name = 'IXI002-Guys-0828_t1.npy'
+root = Path(f'./data/IXI/ind')
 
 # Parameters for the inverse problem
 mask_rate = 0.2
@@ -39,7 +41,7 @@ rho = 10
 
 if sde.lower() == 'vesde':
     from configs.ve import IXI_128_ncsnpp_continuous as configs
-    ckpt_filename = f"exp/ve/{config_name}/checkpoint_{ckpt_num}.pth"
+    ckpt_filename = f"exp/ve/{config_name}"
     config = configs.get_config()
     config.model.num_scales = N
     sde = VESDE(sigma_min=config.model.sigma_min, sigma_max=config.model.sigma_max, N=config.model.num_scales)
@@ -69,7 +71,7 @@ state = restore_checkpoint(ckpt_filename, state, config.device, skip_sigma=True,
 ema.copy_to(score_model.parameters())
 
 # Specify save directory for saving generated samples
-save_root = Path(f'./results/{config_name}/{problem}/mask{mask_rate}/rho{rho}/lambda{lamb}')
+save_root = Path(f'./results/{config_name}/{problem}/mask{mask_rate}_uniform/rho{rho}/lambda{lamb}')
 save_root.mkdir(parents=True, exist_ok=True)
 
 # input - Masked input image (i.e., image with missing pixels)
@@ -88,20 +90,37 @@ for t in irl_types:
 
 # read all data
 fname_list = os.listdir(root)
-fname_list = sorted(fname_list, key=lambda x: float(x.split(".")[0]))
+# fname_list = sorted(fname_list, key=lambda x: float(x.split(".")[0]))
+fname_list = sorted(fname_list)
 print(fname_list)
 all_img = []
 
 print("Loading all data")
+all_img = []
 for fname in tqdm(fname_list):
     just_name = fname.split('.')[0]
-    img = torch.from_numpy(np.load(os.path.join(root, fname), allow_pickle=True))
-    h, w = img.shape
-    img = img.view(1, 1, h, w)
-    all_img.append(img)
-    plt.imsave(os.path.join(save_root, 'label', f'{just_name}.png'), clear(img), cmap='gray')
+    vol = np.load(os.path.join(root, fname), allow_pickle=True)  # shape: (139, 176, 140)
+    n_slices = vol.shape[0]
+    for idx in range(n_slices):
+        slice_img = vol[idx, :, :]  # shape: (176, 140)
+        # Normalize to [0, 1]
+        min_val, max_val = slice_img.min(), slice_img.max()
+        if max_val > min_val:
+            slice_img = (slice_img - min_val) / (max_val - min_val)
+        else:
+            slice_img = np.zeros_like(slice_img)
+        # Resize to (128, 128)
+        pil_img = Image.fromarray((slice_img * 255).astype(np.uint8))
+        pil_img = pil_img.resize(resize_to, resample=Image.BICUBIC)
+        resized = np.array(pil_img).astype(np.float32) / 255.0
+        # Add batch and channel dimensions: (1, 1, H, W)
+        img_tensor = torch.from_numpy(resized).unsqueeze(0).unsqueeze(0)
+        all_img.append(img_tensor)
+        # Save label image for visualization
+        plt.imsave(os.path.join(save_root, 'label', f'{just_name}_slice{idx:03d}.png'), clear(img_tensor), cmap='gray')
 all_img = torch.cat(all_img, dim=0)
 print(f"Data loaded shape : {all_img.shape}")
+h, w = all_img.shape[-2], all_img.shape[-1]
 
 # Inpainting operator
 inpaint = Inpainting(img_heigth=h, img_width=w, mask_rate=mask_rate, device=config.device)

@@ -24,3 +24,5 @@ results/
 results_AAPM/
 results_AAPM_tv/
 workdir/
+
+move_val_volumes.py
