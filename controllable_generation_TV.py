@@ -226,7 +226,8 @@ def get_pc_radon_ADMM_TV(sde, predictor, corrector, inverse_scaler, snr,
 def get_pc_radon_ADMM_TV_vol(sde, predictor, corrector, inverse_scaler, snr,
                              n_steps=1, probability_flow=False, continuous=False,
                              denoise=True, eps=1e-5, radon=None, save_progress=False, save_root=None,
-                             final_consistency=False, img_shape=None, lamb_1=5, rho=10):
+                             final_consistency=False, img_shape=None, lamb_1=5, rho=10, 
+                             recon_batch_size = 12):
     """ Sparse application of measurement consistency """
     # Define predictor & corrector
     predictor_update_fn = functools.partial(shared_predictor_update_fn,
@@ -324,7 +325,7 @@ def get_pc_radon_ADMM_TV_vol(sde, predictor, corrector, inverse_scaler, snr,
             for i in tqdm(range(sde.N)):
                 t = timesteps[i]
                 # 1. batchify into sizes that fit into the GPU
-                x_batch = batchfy(x, 12)
+                x_batch = batchfy(x, recon_batch_size)
                 # 2. Run PC step for each batch
                 x_agg = list()
                 for idx, x_batch_sing in enumerate(x_batch):

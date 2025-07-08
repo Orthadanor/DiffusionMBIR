@@ -13,7 +13,7 @@ from sde_lib import VESDE
 from sampling import (ReverseDiffusionPredictor, LangevinCorrector)
 import datasets
 import time
-from physics.inpainting import Inpainting
+from physics.inpainting import Inpainting3D
 import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm
@@ -29,12 +29,13 @@ num_scales = 2000 # Diffusion steps
 ckpt_num = 10 # Use best checkpoint
 N = num_scales
 resize_to = (128, 128)
+slice_range = range(55, 85) # Slice range within the volume for inpainting
 
 vol_name = 'IXI002-Guys-0828_t1.npy'
 root = Path(f'./data/IXI/ind')
 
 # Parameters for the inverse problem
-mask_rate = 0.2
+mask_rate = 'middle'
 size = 128
 lamb = 0.04
 rho = 10
@@ -53,7 +54,7 @@ probability_flow = False
 snr = 0.16
 n_steps = 1
 
-batch_size = 12
+batch_size = 10
 config.training.batch_size = batch_size
 config.eval.batch_size = batch_size
 random_seed = 0
@@ -100,9 +101,8 @@ all_img = []
 for fname in tqdm(fname_list):
     just_name = fname.split('.')[0]
     vol = np.load(os.path.join(root, fname), allow_pickle=True)  # shape: (139, 176, 140)
-    n_slices = vol.shape[0]
-    for idx in range(n_slices):
-        slice_img = vol[idx, :, :]  # shape: (176, 140)
+    for idx in slice_range:
+        slice_img = vol[:, :, idx]  # shape: (139, 176)
         # Normalize to [0, 1]
         min_val, max_val = slice_img.min(), slice_img.max()
         if max_val > min_val:
@@ -120,29 +120,38 @@ for fname in tqdm(fname_list):
         plt.imsave(os.path.join(save_root, 'label', f'{just_name}_slice{idx:03d}.png'), clear(img_tensor), cmap='gray')
 all_img = torch.cat(all_img, dim=0)
 print(f"Data loaded shape : {all_img.shape}")
-h, w = all_img.shape[-2], all_img.shape[-1]
+n_slices, _, h, w = all_img.shape
 
 # Inpainting operator
-inpaint = Inpainting(img_heigth=h, img_width=w, mask_rate=mask_rate, device=config.device)
+inpaint3d = Inpainting3D(n_slices=n_slices, img_heigth=h, img_width=w, device=config.device)
 
 # Save mask for visualization
-plt.imsave(os.path.join(save_root, 'mask', 'mask.png'), inpaint.mask.cpu().numpy(), cmap='gray')
+# Save each slice's mask as a separate image
+for i in range(inpaint3d.masks.shape[0]):
+    plt.imsave(os.path.join(save_root, 'mask', f'mask_{i:03d}.png'),
+               inpaint3d.masks[i].cpu().numpy(), cmap='gray')
+# plt.imsave(os.path.join(save_root, 'mask', 'mask.png'), inpaint3d.mask.cpu().numpy(), cmap='gray')
+# Save the bulk masks tensor
+torch.save(inpaint3d.masks.cpu(), os.path.join(save_root, 'mask', 'masks.pt'))
+# Access masks
+masks = torch.load(os.path.join(save_root, 'mask', 'masks.pt'))
 
 img = all_img.to(config.device)
 pc_inpaint = controllable_generation_TV.get_pc_radon_ADMM_TV_vol(
     sde, predictor, corrector, inverse_scaler,
     snr=snr, n_steps=n_steps, probability_flow=probability_flow,
     continuous=config.training.continuous, denoise=True,
-    radon=inpaint,  # Use inpainting operator
+    radon=inpaint3d,  # Use inpainting operator
     save_progress=True, save_root=save_root, final_consistency=True,
-    img_shape=img.shape, lamb_1=lamb, rho=rho
+    img_shape=img.shape, lamb_1=lamb, rho=rho,
+    recon_batch_size=config.eval.batch_size
 )
 
 # Forward model (apply mask)
-masked_img = inpaint.A(img)
+masked_img = inpaint3d.A(img)
 
 # Adjoint (for iterative solver, same as mask for inpainting)
-bp = inpaint.A_dagger(masked_img)
+bp = inpaint3d.A_dagger(masked_img)
 
 # Recon Image
 x = pc_inpaint(score_model, scaler(img), measurement=masked_img)
@@ -155,5 +164,8 @@ for i, recon_img in enumerate(x):
     plt.imsave(save_root / 'recon' / f'{count}.png', clear(recon_img), cmap='gray')
     plt.imsave(save_root / 'input' / f'{count}.png', clear(masked_img[i]), cmap='gray')
     count += 1
+
+# Save the reconstructed volume as a numpy file
+np.save(os.path.join(save_root, 'recon_volume.npy'), x.cpu().numpy())
 
 print("Inpainting pipeline finished.")
